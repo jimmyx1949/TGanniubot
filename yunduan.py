@@ -7,7 +7,8 @@ import re
 import os
 
 # Bot Token
-TOKEN = "8132777347:AAG4Wr50uMSkkzckFENSRaNaGbNu9mFLnFM"
+import os
+TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 
 # 定时任务列表
 scheduled_tasks = []
