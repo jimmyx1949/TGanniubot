@@ -1,0 +1,2 @@
+python-telegram-bot
+flask==2.3.3
