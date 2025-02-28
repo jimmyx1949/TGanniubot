@@ -4,18 +4,7 @@ from telegram.ext import Application, ApplicationBuilder, CommandHandler, Messag
 import asyncio
 from datetime import datetime
 import re
-from flask import Flask
-import threading
-
-# Flask 服务器
-app = Flask(__name__)
-
-@app.route('/')
-def keep_alive():
-    return "Bot is alive!"
-
-def run_flask():
-    app.run(host='0.0.0.0', port=8080)  # Render 默认使用 8080 端口
+import os
 
 # Bot Token
 import os
@@ -373,38 +362,70 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 # 频道帖子识别与重发
 async def handle_channel_post(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     message = update.channel_post
-    if message.text and "===" in message.text:
-        parts = message.text.split("===", 1)
-        if len(parts) == 2:
-            content = parts[0].strip()
-            button_text = parts[1].strip()
-            lines = button_text.split("\n")
-            keyboard = []
-            buttons = []
-            
-            for line in lines:
-                items = re.split(r"[,，]", line)
-                row = []
-                for item in items:
-                    item = item.strip()
-                    if item.startswith("[") and item.endswith("]") and "+" in item:
-                        btn_info = item[1:-1].split("+", 1)
-                        if len(btn_info) == 2 and len(buttons) < 9:
-                            btn = InlineKeyboardButton(btn_info[0].strip(), url=btn_info[1].strip())
-                            row.append(btn)
-                            buttons.append(btn)
-                if row:
-                    keyboard.append(row)
-            
-            if buttons:
-                reply_markup = InlineKeyboardMarkup(keyboard)
-                await context.bot.delete_message(chat_id=message.chat_id, message_id=message.message_id)
-                await context.bot.send_message(chat_id=message.chat_id, text=content, reply_markup=reply_markup)
+    # 检查文本或标题中是否包含 "==="
+    content = message.text if message.text else message.caption if message.caption else ""
+    if not content or "===" not in content:
+        return  # 如果没有内容或没有 "==="，直接退出
+    
+    # 分割内容和按钮部分
+    parts = content.split("===", 1)
+    if len(parts) != 2:
+        return  # 如果分割后不是两部分，格式错误，退出
+    
+    content_text = parts[0].strip()  # 文案部分
+    button_text = parts[1].strip()   # 按钮部分
+    
+    # 解析按钮
+    lines = button_text.split("\n")
+    keyboard = []
+    buttons = []
+    
+    for line in lines:
+        items = re.split(r"[,，]", line)
+        row = []
+        for item in items:
+            item = item.strip()
+            if item.startswith("[") and item.endswith("]") and "+" in item:
+                btn_info = item[1:-1].split("+", 1)
+                if len(btn_info) == 2 and len(buttons) < 9:
+                    btn = InlineKeyboardButton(btn_info[0].strip(), url=btn_info[1].strip())
+                    row.append(btn)
+                    buttons.append(btn)
+        if row:
+            keyboard.append(row)
+    
+    if not buttons:
+        return  # 如果没有有效的按钮，退出
+    
+    # 生成按钮键盘
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    # 删除原消息
+    await context.bot.delete_message(chat_id=message.chat_id, message_id=message.message_id)
+    
+    # 根据消息类型重发
+    if message.photo:
+        await context.bot.send_photo(
+            chat_id=message.chat_id,
+            photo=message.photo[-1].file_id,  # 使用最高质量的图片
+            caption=content_text,
+            reply_markup=reply_markup
+        )
+    elif message.video:
+        await context.bot.send_video(
+            chat_id=message.chat_id,
+            video=message.video.file_id,
+            caption=content_text,
+            reply_markup=reply_markup
+        )
+    else:
+        await context.bot.send_message(
+            chat_id=message.chat_id,
+            text=content_text,
+            reply_markup=reply_markup
+        )
 
 def main():
-    # 启动 Flask 服务器线程
-    threading.Thread(target=run_flask, daemon=True).start()
-
     application = ApplicationBuilder().token(TOKEN).build()
 
     application.add_handler(CommandHandler("start", start))
