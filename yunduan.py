@@ -69,8 +69,10 @@ async def handle_new_chat_member(update: Update, context: ContextTypes.DEFAULT_T
 # 频道帖子识别与重发
 async def handle_channel_post(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     message = update.channel_post
-    if message.text and "===" in message.text:
-        parts = message.text.split("===", 1)
+    # 检查文本或标题中是否有 "==="
+    text = message.text or message.caption or ""
+    if "===" in text:
+        parts = text.split("===", 1)
         if len(parts) == 2:
             content = parts[0].strip()
             button_text = parts[1].strip()
@@ -94,8 +96,30 @@ async def handle_channel_post(update: Update, context: ContextTypes.DEFAULT_TYPE
             
             if buttons:
                 reply_markup = InlineKeyboardMarkup(keyboard)
+                # 删除原始消息
                 await context.bot.delete_message(chat_id=message.chat_id, message_id=message.message_id)
-                new_message = await context.bot.send_message(chat_id=message.chat_id, text=content, reply_markup=reply_markup)
+                
+                # 根据消息类型重新发送
+                if message.photo:
+                    new_message = await context.bot.send_photo(
+                        chat_id=message.chat_id,
+                        photo=message.photo[-1].file_id,  # 使用最高质量的图片
+                        caption=content,
+                        reply_markup=reply_markup
+                    )
+                elif message.video:
+                    new_message = await context.bot.send_video(
+                        chat_id=message.chat_id,
+                        video=message.video.file_id,
+                        caption=content,
+                        reply_markup=reply_markup
+                    )
+                else:
+                    new_message = await context.bot.send_message(
+                        chat_id=message.chat_id,
+                        text=content,
+                        reply_markup=reply_markup
+                    )
                 
                 # 记录日志
                 chat_title = message.chat.title or "未命名频道"
