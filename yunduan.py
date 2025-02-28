@@ -50,18 +50,14 @@ HOME_MESSAGE = """
 开始在频道发帖试试吧！
 """
 
-# 启动机器人 - 显示主页
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    await update.message.reply_text(HOME_MESSAGE)
-
-# 处理私聊中任何消息 - 只显示主页
-async def handle_private_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+# 启动机器人或处理私聊消息 - 只显示主页信息
+async def handle_private(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text(HOME_MESSAGE)
 
 # 处理机器人被加入频道
 async def handle_new_chat_member(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     message = update.message
-    if message.new_chat_members:
+    if message and message.new_chat_members:
         for member in message.new_chat_members:
             if member.id == context.bot.id:
                 inviter = message.from_user.username or message.from_user.full_name or f"ID:{message.from_user.id}"
@@ -114,11 +110,11 @@ def main():
 
     application = ApplicationBuilder().token(TOKEN).build()
 
-    # 处理私聊
-    application.add_handler(CommandHandler("start", start))
+    # 处理私聊（包括 /start 和任何消息）
+    application.add_handler(CommandHandler("start", handle_private))
     application.add_handler(MessageHandler(
         telegram.ext.filters.ChatType.PRIVATE, 
-        handle_private_message
+        handle_private
     ))
     
     # 处理频道帖子
