@@ -17,8 +17,6 @@ logger = logging.getLogger(__name__)
 app = Flask(__name__)
 TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 WEBHOOK_URL = os.environ.get("WEBHOOK_URL")
-
-# Telegram 应用
 application = Application.builder().token(TOKEN).build()
 
 # 主页信息
@@ -111,11 +109,22 @@ async def handle_channel_post(update: Update, context: ContextTypes.DEFAULT_TYPE
 
 # Webhook 处理
 @app.route(f"/{TOKEN}", methods=["POST"])
-def webhook():
+async def webhook():
     try:
-        update = Update.de_json(request.get_json(force=True), application.bot)
-        logger.info("Received update from Telegram")
-        asyncio.run(application.process_update(update))
+        json_data = request.get_json(force=True)
+        logger.info(f"Received JSON: {json_data}")
+        if not json_data or "update_id" not in json_data:
+            logger.error("Invalid JSON: missing update_id")
+            return "Error: Invalid update", 400
+        if "message" in json_data and "date" not in json_data["message"]:
+            logger.error("Invalid JSON: missing date in message")
+            return "Error: Missing date", 400
+        update = Update.de_json(json_data, application.bot)
+        if update is None:
+            logger.error("Failed to parse update")
+            return "Error: Invalid update", 400
+        await application.process_update(update)
+        logger.info("Update processed successfully")
         return "OK", 200
     except Exception as e:
         logger.error(f"Webhook error: {e}")
@@ -139,15 +148,23 @@ async def set_webhook():
     logger.info(f"Webhook set to {WEBHOOK_URL}/{TOKEN}")
 
 # 初始化
-if 'RENDER' in os.environ:  # Render 环境下
-    setup_handlers()
+setup_handlers()
+if 'RENDER' in os.environ:
     loop = asyncio.get_event_loop()
     loop.run_until_complete(set_webhook())
 
+# 为 Flask 创建异步支持
+from functools import wraps
+def async_action(f):
+    @wraps(f)
+    def wrapped(*args, **kwargs):
+        return asyncio.run(f(*args, **kwargs))
+    return wrapped
+
+app.route(f"/{TOKEN}", methods=["POST"])(async_action(webhook))
+
 if __name__ == "__main__":
-    if 'RENDER' not in os.environ:  # 本地测试
-        setup_handlers()
-        loop = asyncio.get_event_loop()
-        loop.run_until_complete(set_webhook())
-        port = int(os.environ.get("PORT", 10000))
-        app.run(host="0.0.0.0", port=port)
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(set_webhook())
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host="0.0.0.0", port=port)
