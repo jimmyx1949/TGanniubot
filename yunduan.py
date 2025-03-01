@@ -107,9 +107,9 @@ async def handle_channel_post(update: Update, context: ContextTypes.DEFAULT_TYPE
                         reply_markup=reply_markup
                     )
 
-# Webhook 处理
+# Webhook 处理（同步方式）
 @app.route(f"/{TOKEN}", methods=["POST"])
-async def webhook():
+def webhook():
     try:
         json_data = request.get_json(force=True)
         logger.info(f"Received JSON: {json_data}")  # 添加日志
@@ -120,7 +120,8 @@ async def webhook():
         if update is None:
             logger.error("Failed to parse update")
             return "Error: Invalid update", 400
-        await application.process_update(update)
+        # 使用 asyncio.run 运行异步代码
+        asyncio.run(application.process_update(update))
         logger.info("Update processed successfully")
         return "OK", 200
     except Exception as e:
