@@ -1,11 +1,13 @@
 import telegram
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Application, CommandHandler, MessageHandler, ContextTypes, filters
-from flask import Flask, request
+from telegram.ext import Application, ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes
+import asyncio
+import re
+from flask import Flask
+import threading
 import logging
 from datetime import datetime
 import os
-import asyncio
 
 # 设置日志
 logging.basicConfig(
@@ -16,9 +18,16 @@ logger = logging.getLogger(__name__)
 
 # Flask 服务器
 app = Flask(__name__)
+
+@app.route('/')
+def keep_alive():
+    return "Bot is alive!"
+
+def run_flask():
+    app.run(host='0.0.0.0', port=8080)
+
+# Bot Token
 TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
-WEBHOOK_URL = os.environ.get("WEBHOOK_URL")  # 在 Render 环境变量中设置，例如 https://your-service-name.onrender.com
-application = Application.builder().token(TOKEN).build()
 
 # 主页信息
 HOME_MESSAGE = """
@@ -41,7 +50,7 @@ HOME_MESSAGE = """
 开始在频道发帖试试吧！
 """
 
-# 处理私聊消息
+# 启动机器人或处理私聊消息 - 只显示主页信息
 async def handle_private(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text(HOME_MESSAGE)
 
@@ -60,9 +69,8 @@ async def handle_new_chat_member(update: Update, context: ContextTypes.DEFAULT_T
 # 频道帖子识别与重发
 async def handle_channel_post(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     message = update.channel_post
-    text = message.text or message.caption or ""
-    if "===" in text:
-        parts = text.split("===", 1)
+    if message.text and "===" in message.text:
+        parts = message.text.split("===", 1)
         if len(parts) == 2:
             content = parts[0].strip()
             button_text = parts[1].strip()
@@ -71,7 +79,7 @@ async def handle_channel_post(update: Update, context: ContextTypes.DEFAULT_TYPE
             buttons = []
             
             for line in lines:
-                items = line.split(",")
+                items = re.split(r"[,，]", line)
                 row = []
                 for item in items:
                     item = item.strip()
@@ -87,63 +95,41 @@ async def handle_channel_post(update: Update, context: ContextTypes.DEFAULT_TYPE
             if buttons:
                 reply_markup = InlineKeyboardMarkup(keyboard)
                 await context.bot.delete_message(chat_id=message.chat_id, message_id=message.message_id)
+                new_message = await context.bot.send_message(chat_id=message.chat_id, text=content, reply_markup=reply_markup)
                 
-                if message.photo:
-                    new_message = await context.bot.send_photo(
-                        chat_id=message.chat_id,
-                        photo=message.photo[-1].file_id,
-                        caption=content,
-                        reply_markup=reply_markup
-                    )
-                elif message.video:
-                    new_message = await context.bot.send_video(
-                        chat_id=message.chat_id,
-                        video=message.video.file_id,
-                        caption=content,
-                        reply_markup=reply_markup
-                    )
-                else:
-                    new_message = await context.bot.send_message(
-                        chat_id=message.chat_id,
-                        text=content,
-                        reply_markup=reply_markup
-                    )
-                
+                # 记录日志
                 chat_title = message.chat.title or "未命名频道"
                 timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 message_link = f"https://t.me/c/{str(message.chat_id)[4:]}/{new_message.message_id}"
                 sender = message.from_user.username or message.from_user.full_name or f"ID:{message.from_user.id}"
                 logger.info(f"频道帖子处理: {chat_title} (ID: {message.chat_id}), 发送者: {sender}, 时间: {timestamp}, 消息链接: {message_link}")
 
-# Webhook 处理
-@app.route(f"/{TOKEN}", methods=["POST"])
-def webhook():
-    update = Update.de_json(request.get_json(force=True), application.bot)
-    asyncio.run(application.process_update(update))
-    return "OK", 200
-
-@app.route('/')
-def keep_alive():
-    return "Bot is alive!"
-
-# 设置 Webhook
-def set_webhook():
-    asyncio.run(application.bot.set_webhook(url=f"{WEBHOOK_URL}/{TOKEN}"))
-    logger.info(f"Webhook set to {WEBHOOK_URL}/{TOKEN}")
-
 def main():
-    # 添加处理器
+    # 启动 Flask 服务器线程
+    threading.Thread(target=run_flask, daemon=True).start()
+
+    application = ApplicationBuilder().token(TOKEN).build()
+
+    # 处理私聊（包括 /start 和任何消息）
     application.add_handler(CommandHandler("start", handle_private))
-    application.add_handler(MessageHandler(filters.ChatType.PRIVATE, handle_private))
-    application.add_handler(MessageHandler(filters.ChatType.CHANNEL, handle_channel_post))
-    application.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, handle_new_chat_member))
+    application.add_handler(MessageHandler(
+        telegram.ext.filters.ChatType.PRIVATE, 
+        handle_private
+    ))
+    
+    # 处理频道帖子
+    application.add_handler(MessageHandler(
+        telegram.ext.filters.ChatType.CHANNEL, 
+        handle_channel_post
+    ))
+    
+    # 处理机器人被加入频道
+    application.add_handler(MessageHandler(
+        telegram.ext.filters.StatusUpdate.NEW_CHAT_MEMBERS,
+        handle_new_chat_member
+    ))
 
-    # 设置 Webhook
-    set_webhook()
-
-    # 启动 Flask
-    port = int(os.environ.get("PORT", 10000))  # Render 默认端口
-    app.run(host="0.0.0.0", port=port)
+    application.run_polling()
 
 if __name__ == "__main__":
     main()
