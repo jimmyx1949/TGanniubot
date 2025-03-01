@@ -1,0 +1,1 @@
+curl -F "url=https://tganniubot.onrender.com/7560179041:AAGFvzBwhaR--38Makp6CS24S9CJ_ppEL_Q" https://api.telegram.org/bot7560179041:AAGFvzBwhaR--38Makp6CS24S9CJ_ppEL_Q/setWebhook

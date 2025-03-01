@@ -120,9 +120,8 @@ def webhook():
         if update is None:
             logger.error("Failed to parse update")
             return "Error: Invalid update", 400
-        # 确保 Application 已初始化
-        if not application.initialized:
-            application.initialize()
+        # 确保处理器已设置
+        setup_handlers()
         # 使用 asyncio.run 运行异步代码
         asyncio.run(application.process_update(update))
         logger.info("Update processed successfully")
