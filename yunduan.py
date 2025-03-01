@@ -161,8 +161,6 @@ def async_action(f):
         return asyncio.run(f(*args, **kwargs))
     return wrapped
 
-app.route(f"/{TOKEN}", methods=["POST"])(async_action(webhook))
-
 if __name__ == "__main__":
     loop = asyncio.get_event_loop()
     loop.run_until_complete(set_webhook())
