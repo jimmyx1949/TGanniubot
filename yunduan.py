@@ -116,9 +116,13 @@ def webhook():
         if not json_data or "update_id" not in json_data:
             logger.error("Invalid JSON: missing update_id")
             return "Error: Invalid update", 400
-        if "message" in json_data and "date" not in json_data["message"]:
-            logger.error("Invalid JSON: missing date in message")
-            return "Error: Missing date", 400
+        if "message" in json_data:
+            if "date" not in json_data["message"]:
+                logger.error("Invalid JSON: missing date in message")
+                return "Error: Missing date", 400
+            if "message_id" not in json_data["message"]:
+                logger.error("Invalid JSON: missing message_id in message")
+                return "Error: Missing message_id", 400
         update = Update.de_json(json_data, application.bot)
         if update is None:
             logger.error("Failed to parse update")
