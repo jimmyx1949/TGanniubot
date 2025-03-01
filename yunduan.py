@@ -5,6 +5,7 @@ from flask import Flask, request
 import logging
 import os
 import asyncio
+from aiohttp import web
 
 # 设置日志
 logging.basicConfig(
@@ -13,7 +14,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Flask 应用
+# Flask 应用（仅用于 Render 的根路径）
 app = Flask(__name__)
 TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 WEBHOOK_URL = os.environ.get("WEBHOOK_URL")
@@ -107,33 +108,33 @@ async def handle_channel_post(update: Update, context: ContextTypes.DEFAULT_TYPE
                         reply_markup=reply_markup
                     )
 
-# Webhook 处理
-@app.route(f"/{TOKEN}", methods=["POST"])
-def webhook():
+# Webhook 处理（异步）
+async def webhook(request):
     try:
-        json_data = request.get_json(force=True)
+        json_data = await request.json()
         logger.info(f"Received JSON: {json_data}")
         if not json_data or "update_id" not in json_data:
             logger.error("Invalid JSON: missing update_id")
-            return "Error: Invalid update", 400
+            return web.Response(text="Error: Invalid update", status=400)
         if "message" in json_data:
             if "date" not in json_data["message"]:
                 logger.error("Invalid JSON: missing date in message")
-                return "Error: Missing date", 400
+                return web.Response(text="Error: Missing date", status=400)
             if "message_id" not in json_data["message"]:
                 logger.error("Invalid JSON: missing message_id in message")
-                return "Error: Missing message_id", 400
+                return web.Response(text="Error: Missing message_id", status=400)
         update = Update.de_json(json_data, application.bot)
         if update is None:
             logger.error("Failed to parse update")
-            return "Error: Invalid update", 400
-        asyncio.run(application.process_update(update))
+            return web.Response(text="Error: Invalid update", status=400)
+        await application.process_update(update)
         logger.info("Update processed successfully")
-        return "OK", 200
+        return web.Response(text="OK", status=200)
     except Exception as e:
         logger.error(f"Webhook error: {e}")
-        return "Error", 500
+        return web.Response(text="Error", status=500)
 
+# 根路径（给 UptimeRobot）
 @app.route('/')
 def keep_alive():
     logger.info("Root path accessed")
@@ -152,14 +153,29 @@ async def set_webhook():
     await application.bot.set_webhook(url=f"{WEBHOOK_URL}/{TOKEN}")
     logger.info(f"Webhook set to {WEBHOOK_URL}/{TOKEN}")
 
-# 初始化
-setup_handlers()
-if 'RENDER' in os.environ:
-    loop = asyncio.get_event_loop()
-    loop.run_until_complete(set_webhook())
+# 启动 aiohttp 服务器
+async def start_aiohttp():
+    aio_app = web.Application()
+    aio_app.router.add_post(f"/{TOKEN}", webhook)
+    runner = web.AppRunner(aio_app)
+    await runner.setup()
+    site = web.TCPSite(runner, '0.0.0.0', 10000)
+    await site.start()
+    logger.info("aiohttp server started on port 10000")
+
+# 主函数
+async def main():
+    setup_handlers()
+    await set_webhook()
+    await start_aiohttp()
 
 if __name__ == "__main__":
-    loop = asyncio.get_event_loop()
-    loop.run_until_complete(set_webhook())
-    port = int(os.environ.get("PORT", 10000))
-    app.run(host="0.0.0.0", port=port)
+    if 'RENDER' not in os.environ:
+        # 本地运行 Flask
+        loop = asyncio.get_event_loop()
+        loop.run_until_complete(set_webhook())
+        port = int(os.environ.get("PORT", 10000))
+        app.run(host="0.0.0.0", port=port)
+    else:
+        # Render 上运行 aiohttp
+        asyncio.run(main())
