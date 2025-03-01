@@ -1,7 +1,6 @@
 import telegram
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, ContextTypes, filters
-from flask import Flask, request
 import logging
 import os
 import asyncio
@@ -14,8 +13,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Flask 应用（仅用于 Render 的根路径）
-app = Flask(__name__)
+# 配置
 TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 WEBHOOK_URL = os.environ.get("WEBHOOK_URL")
 application = Application.builder().token(TOKEN).build()
@@ -108,7 +106,7 @@ async def handle_channel_post(update: Update, context: ContextTypes.DEFAULT_TYPE
                         reply_markup=reply_markup
                     )
 
-# Webhook 处理（异步）
+# Webhook 处理
 async def webhook(request):
     try:
         json_data = await request.json()
@@ -134,11 +132,10 @@ async def webhook(request):
         logger.error(f"Webhook error: {e}")
         return web.Response(text="Error", status=500)
 
-# 根路径（给 UptimeRobot）
-@app.route('/')
-def keep_alive():
+# 根路径处理
+async def keep_alive(request):
     logger.info("Root path accessed")
-    return "Bot is alive!"
+    return web.Response(text="Bot is alive!")
 
 # 设置处理器
 def setup_handlers():
@@ -154,28 +151,22 @@ async def set_webhook():
     logger.info(f"Webhook set to {WEBHOOK_URL}/{TOKEN}")
 
 # 启动 aiohttp 服务器
-async def start_aiohttp():
-    aio_app = web.Application()
-    aio_app.router.add_post(f"/{TOKEN}", webhook)
-    runner = web.AppRunner(aio_app)
+async def main():
+    setup_handlers()
+    await set_webhook()
+    
+    app = web.Application()
+    app.router.add_post(f"/{TOKEN}", webhook)
+    app.router.add_get('/', keep_alive)  # 添加根路径
+    runner = web.AppRunner(app)
     await runner.setup()
     site = web.TCPSite(runner, '0.0.0.0', 10000)
     await site.start()
     logger.info("aiohttp server started on port 10000")
-
-# 主函数
-async def main():
-    setup_handlers()
-    await set_webhook()
-    await start_aiohttp()
+    
+    # 保持运行
+    while True:
+        await asyncio.sleep(3600)  # 每小时休眠一次，避免退出
 
 if __name__ == "__main__":
-    if 'RENDER' not in os.environ:
-        # 本地运行 Flask
-        loop = asyncio.get_event_loop()
-        loop.run_until_complete(set_webhook())
-        port = int(os.environ.get("PORT", 10000))
-        app.run(host="0.0.0.0", port=port)
-    else:
-        # Render 上运行 aiohttp
-        asyncio.run(main())
+    asyncio.run(main())
