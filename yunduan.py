@@ -112,13 +112,10 @@ async def handle_channel_post(update: Update, context: ContextTypes.DEFAULT_TYPE
 async def webhook():
     try:
         json_data = request.get_json(force=True)
-        logger.info(f"Received JSON: {json_data}")
+        logger.info(f"Received JSON: {json_data}")  # 添加日志
         if not json_data or "update_id" not in json_data:
             logger.error("Invalid JSON: missing update_id")
             return "Error: Invalid update", 400
-        if "message" in json_data and "date" not in json_data["message"]:
-            logger.error("Invalid JSON: missing date in message")
-            return "Error: Missing date", 400
         update = Update.de_json(json_data, application.bot)
         if update is None:
             logger.error("Failed to parse update")
@@ -152,14 +149,6 @@ setup_handlers()
 if 'RENDER' in os.environ:
     loop = asyncio.get_event_loop()
     loop.run_until_complete(set_webhook())
-
-# 为 Flask 创建异步支持
-from functools import wraps
-def async_action(f):
-    @wraps(f)
-    def wrapped(*args, **kwargs):
-        return asyncio.run(f(*args, **kwargs))
-    return wrapped
 
 if __name__ == "__main__":
     loop = asyncio.get_event_loop()
