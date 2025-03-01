@@ -107,22 +107,22 @@ async def handle_channel_post(update: Update, context: ContextTypes.DEFAULT_TYPE
                         reply_markup=reply_markup
                     )
 
-# Webhook 处理（同步方式）
+# Webhook 处理
 @app.route(f"/{TOKEN}", methods=["POST"])
 def webhook():
     try:
         json_data = request.get_json(force=True)
-        logger.info(f"Received JSON: {json_data}")  # 添加日志
+        logger.info(f"Received JSON: {json_data}")
         if not json_data or "update_id" not in json_data:
             logger.error("Invalid JSON: missing update_id")
             return "Error: Invalid update", 400
+        if "message" in json_data and "date" not in json_data["message"]:
+            logger.error("Invalid JSON: missing date in message")
+            return "Error: Missing date", 400
         update = Update.de_json(json_data, application.bot)
         if update is None:
             logger.error("Failed to parse update")
             return "Error: Invalid update", 400
-        # 确保处理器已设置
-        setup_handlers()
-        # 使用 asyncio.run 运行异步代码
         asyncio.run(application.process_update(update))
         logger.info("Update processed successfully")
         return "OK", 200
