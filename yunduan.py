@@ -3,7 +3,6 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, ContextTypes, filters
 from flask import Flask, request
 import logging
-from datetime import datetime
 import os
 import asyncio
 
@@ -14,10 +13,12 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Flask 服务器
+# Flask 应用
 app = Flask(__name__)
 TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 WEBHOOK_URL = os.environ.get("WEBHOOK_URL")
+
+# Telegram 应用
 application = Application.builder().token(TOKEN).build()
 
 # 主页信息
@@ -54,8 +55,7 @@ async def handle_new_chat_member(update: Update, context: ContextTypes.DEFAULT_T
                 inviter = message.from_user.username or message.from_user.full_name or f"ID:{message.from_user.id}"
                 chat_title = message.chat.title or "未命名频道"
                 chat_id = message.chat_id
-                timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                logger.info(f"机器人被加入频道: {chat_title} (ID: {chat_id}), 邀请者: {inviter}, 时间: {timestamp}")
+                logger.info(f"机器人被加入频道: {chat_title} (ID: {chat_id}), 邀请者: {inviter}")
 
 # 频道帖子识别与重发
 async def handle_channel_post(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -89,31 +89,25 @@ async def handle_channel_post(update: Update, context: ContextTypes.DEFAULT_TYPE
                 await context.bot.delete_message(chat_id=message.chat_id, message_id=message.message_id)
                 
                 if message.photo:
-                    new_message = await context.bot.send_photo(
+                    await context.bot.send_photo(
                         chat_id=message.chat_id,
                         photo=message.photo[-1].file_id,
                         caption=content,
                         reply_markup=reply_markup
                     )
                 elif message.video:
-                    new_message = await context.bot.send_video(
+                    await context.bot.send_video(
                         chat_id=message.chat_id,
                         video=message.video.file_id,
                         caption=content,
                         reply_markup=reply_markup
                     )
                 else:
-                    new_message = await context.bot.send_message(
+                    await context.bot.send_message(
                         chat_id=message.chat_id,
                         text=content,
                         reply_markup=reply_markup
                     )
-                
-                chat_title = message.chat.title or "未命名频道"
-                timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                message_link = f"https://t.me/c/{str(message.chat_id)[4:]}/{new_message.message_id}"
-                sender = message.from_user.username or message.from_user.full_name or f"ID:{message.from_user.id}"
-                logger.info(f"频道帖子处理: {chat_title} (ID: {message.chat_id}), 发送者: {sender}, 时间: {timestamp}, 消息链接: {message_link}")
 
 # Webhook 处理
 @app.route(f"/{TOKEN}", methods=["POST"])
@@ -129,6 +123,7 @@ def webhook():
 
 @app.route('/')
 def keep_alive():
+    logger.info("Root path accessed")
     return "Bot is alive!"
 
 # 设置处理器
@@ -144,10 +139,15 @@ async def set_webhook():
     logger.info(f"Webhook set to {WEBHOOK_URL}/{TOKEN}")
 
 # 初始化
-setup_handlers()
-loop = asyncio.get_event_loop()
-loop.run_until_complete(set_webhook())
+if 'RENDER' in os.environ:  # Render 环境下
+    setup_handlers()
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(set_webhook())
 
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 10000))
-    app.run(host="0.0.0.0", port=port)
+    if 'RENDER' not in os.environ:  # 本地测试
+        setup_handlers()
+        loop = asyncio.get_event_loop()
+        loop.run_until_complete(set_webhook())
+        port = int(os.environ.get("PORT", 10000))
+        app.run(host="0.0.0.0", port=port)
