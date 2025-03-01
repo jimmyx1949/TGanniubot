@@ -148,6 +148,7 @@ def setup_handlers():
 
 # 设置 Webhook
 async def set_webhook():
+    await application.initialize()  # 初始化 Application
     await application.bot.set_webhook(url=f"{WEBHOOK_URL}/{TOKEN}")
     logger.info(f"Webhook set to {WEBHOOK_URL}/{TOKEN}")
 
