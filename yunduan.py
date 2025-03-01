@@ -143,17 +143,11 @@ async def set_webhook():
     await application.bot.set_webhook(url=f"{WEBHOOK_URL}/{TOKEN}")
     logger.info(f"Webhook set to {WEBHOOK_URL}/{TOKEN}")
 
-def main():
-    # 设置处理器
-    setup_handlers()
-
-    # 初始化 application 并设置 Webhook
-    loop = asyncio.get_event_loop()
-    loop.run_until_complete(set_webhook())
-
-    # 启动 Flask
-    port = int(os.environ.get("PORT", 10000))
-    app.run(host="0.0.0.0", port=port)
+# 初始化
+setup_handlers()
+loop = asyncio.get_event_loop()
+loop.run_until_complete(set_webhook())
 
 if __name__ == "__main__":
-    main()
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host="0.0.0.0", port=port)
