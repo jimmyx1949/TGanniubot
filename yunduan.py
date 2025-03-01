@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 # Flask 服务器
 app = Flask(__name__)
 TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
-WEBHOOK_URL = os.environ.get("WEBHOOK_URL")  # 在 Render 环境变量中设置，例如 https://your-service-name.onrender.com
+WEBHOOK_URL = os.environ.get("WEBHOOK_URL")
 application = Application.builder().token(TOKEN).build()
 
 # 主页信息
@@ -118,31 +118,41 @@ async def handle_channel_post(update: Update, context: ContextTypes.DEFAULT_TYPE
 # Webhook 处理
 @app.route(f"/{TOKEN}", methods=["POST"])
 def webhook():
-    update = Update.de_json(request.get_json(force=True), application.bot)
-    asyncio.run(application.process_update(update))
-    return "OK", 200
+    try:
+        update = Update.de_json(request.get_json(force=True), application.bot)
+        logger.info("Received update from Telegram")
+        asyncio.run(application.process_update(update))
+        return "OK", 200
+    except Exception as e:
+        logger.error(f"Webhook error: {e}")
+        return "Error", 500
 
 @app.route('/')
 def keep_alive():
     return "Bot is alive!"
 
-# 设置 Webhook
-def set_webhook():
-    asyncio.run(application.bot.set_webhook(url=f"{WEBHOOK_URL}/{TOKEN}"))
-    logger.info(f"Webhook set to {WEBHOOK_URL}/{TOKEN}")
-
-def main():
-    # 添加处理器
+# 设置处理器
+def setup_handlers():
     application.add_handler(CommandHandler("start", handle_private))
     application.add_handler(MessageHandler(filters.ChatType.PRIVATE, handle_private))
     application.add_handler(MessageHandler(filters.ChatType.CHANNEL, handle_channel_post))
     application.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, handle_new_chat_member))
 
-    # 设置 Webhook
-    set_webhook()
+# 设置 Webhook
+async def set_webhook():
+    await application.bot.set_webhook(url=f"{WEBHOOK_URL}/{TOKEN}")
+    logger.info(f"Webhook set to {WEBHOOK_URL}/{TOKEN}")
+
+def main():
+    # 设置处理器
+    setup_handlers()
+
+    # 初始化 application 并设置 Webhook
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(set_webhook())
 
     # 启动 Flask
-    port = int(os.environ.get("PORT", 10000))  # Render 默认端口
+    port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
 
 if __name__ == "__main__":
