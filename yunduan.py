@@ -66,6 +66,16 @@ async def handle_group_new_member(update: Update, context: ContextTypes.DEFAULT_
                 except Exception as e:
                     logger.error(f"Failed to delete join message: {e}")
 
+# 处理群组成员退出并删除系统提示
+async def handle_group_left_member(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    message = update.message
+    if message and message.left_chat_member and message.chat.type in ["group", "supergroup"]:
+        try:
+            await context.bot.delete_message(chat_id=message.chat_id, message_id=message.message_id)
+            logger.info(f"Deleted leave message in group {message.chat.title or 'Unnamed Group'} (ID: {message.chat_id})")
+        except Exception as e:
+            logger.error(f"Failed to delete leave message: {e}")
+
 # 频道帖子识别与重发
 async def handle_channel_post(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     message = update.channel_post
@@ -156,6 +166,7 @@ def setup_handlers():
     application.add_handler(MessageHandler(filters.ChatType.CHANNEL, handle_channel_post))
     application.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS & ~filters.ChatType.CHANNEL, handle_group_new_member))
     application.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS & filters.ChatType.CHANNEL, handle_new_chat_member))
+    application.add_handler(MessageHandler(filters.StatusUpdate.LEFT_CHAT_MEMBER, handle_group_left_member))
 
 # 设置 Webhook
 async def set_webhook():
