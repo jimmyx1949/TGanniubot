@@ -54,18 +54,6 @@ async def handle_new_chat_member(update: Update, context: ContextTypes.DEFAULT_T
                 chat_id = message.chat_id
                 logger.info(f"机器人被加入频道: {chat_title} (ID: {chat_id}), 邀请者: {inviter}")
 
-# 处理群组新人加入并删除系统提示
-async def handle_group_new_member(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    message = update.message
-    if message and message.new_chat_members and message.chat.type in ["group", "supergroup"]:
-        for member in message.new_chat_members:
-            if member.id != context.bot.id:  # 排除机器人自己被加入的情况
-                try:
-                    await context.bot.delete_message(chat_id=message.chat_id, message_id=message.message_id)
-                    logger.info(f"Deleted join message in group {message.chat.title or 'Unnamed Group'} (ID: {message.chat_id})")
-                except Exception as e:
-                    logger.error(f"Failed to delete join message: {e}")
-
 # 频道帖子识别与重发
 async def handle_channel_post(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     message = update.channel_post
@@ -154,8 +142,7 @@ def setup_handlers():
     application.add_handler(CommandHandler("start", handle_private))
     application.add_handler(MessageHandler(filters.ChatType.PRIVATE, handle_private))
     application.add_handler(MessageHandler(filters.ChatType.CHANNEL, handle_channel_post))
-    application.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS & ~filters.ChatType.CHANNEL, handle_group_new_member))
-    application.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS & filters.ChatType.CHANNEL, handle_new_chat_member))
+    application.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, handle_new_chat_member))
 
 # 设置 Webhook
 async def set_webhook():
